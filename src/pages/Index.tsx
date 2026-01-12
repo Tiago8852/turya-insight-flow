@@ -1,55 +1,51 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState } from "react";
 import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
 import UploadZone from "@/components/UploadZone";
-import ProcessingStatus, { ProcessingStep } from "@/components/ProcessingStatus";
-import ResultSection from "@/components/ResultSection";
+import SuccessMessage from "@/components/SuccessMessage";
 import BenefitsSection from "@/components/BenefitsSection";
 import Footer from "@/components/Footer";
+import { useToast } from "@/hooks/use-toast";
 
-type AppState = "idle" | "processing" | "completed";
+type AppState = "idle" | "uploading" | "success";
 
 const Index = () => {
   const [files, setFiles] = useState<File[]>([]);
   const [appState, setAppState] = useState<AppState>("idle");
-  const [processingStep, setProcessingStep] = useState<ProcessingStep>("uploading");
-  const [reportUrl, setReportUrl] = useState<string | undefined>();
-  const [completedTimestamp, setCompletedTimestamp] = useState<Date>(new Date());
+  const [submittedCount, setSubmittedCount] = useState(0);
+  const { toast } = useToast();
 
-  // Simulated processing flow (will be replaced with real API calls)
-  const simulateProcessing = useCallback(async () => {
-    setAppState("processing");
-    setProcessingStep("uploading");
-    
-    // Simulate uploading
-    await new Promise((r) => setTimeout(r, 1500));
-    setProcessingStep("processing");
-    
-    // Simulate AI processing
-    await new Promise((r) => setTimeout(r, 2500));
-    setProcessingStep("generating");
-    
-    // Simulate report generation
-    await new Promise((r) => setTimeout(r, 2000));
-    setProcessingStep("completed");
-    
-    // Transition to completed state after a brief moment
-    await new Promise((r) => setTimeout(r, 1000));
-    setCompletedTimestamp(new Date());
-    setReportUrl("#demo-report"); // Will be replaced with real URL
-    setAppState("completed");
-  }, []);
-
-  const handleSubmit = () => {
+  // TODO: Replace with real Supabase upload and webhook trigger
+  const handleSubmit = async () => {
     if (files.length === 0) return;
-    simulateProcessing();
+    
+    setAppState("uploading");
+    
+    try {
+      // Simulate upload delay - will be replaced with real Supabase upload
+      await new Promise((r) => setTimeout(r, 1500));
+      
+      // TODO: Upload files to Supabase Storage
+      // TODO: Trigger n8n webhook with file references
+      
+      setSubmittedCount(files.length);
+      setAppState("success");
+      
+    } catch (error) {
+      console.error("Error uploading files:", error);
+      toast({
+        title: "Erro ao enviar",
+        description: "Ocorreu um erro ao enviar seus arquivos. Tente novamente.",
+        variant: "destructive",
+      });
+      setAppState("idle");
+    }
   };
 
   const handleReset = () => {
     setFiles([]);
     setAppState("idle");
-    setProcessingStep("uploading");
-    setReportUrl(undefined);
+    setSubmittedCount(0);
   };
 
   return (
@@ -59,23 +55,18 @@ const Index = () => {
       <main>
         <HeroSection />
         
-        {appState === "idle" && (
+        {appState !== "success" && (
           <UploadZone
             files={files}
             setFiles={setFiles}
             onSubmit={handleSubmit}
-            isProcessing={false}
+            isProcessing={appState === "uploading"}
           />
         )}
         
-        {appState === "processing" && (
-          <ProcessingStatus currentStep={processingStep} />
-        )}
-        
-        {appState === "completed" && (
-          <ResultSection
-            reportUrl={reportUrl}
-            timestamp={completedTimestamp}
+        {appState === "success" && (
+          <SuccessMessage
+            fileCount={submittedCount}
             onReset={handleReset}
           />
         )}
