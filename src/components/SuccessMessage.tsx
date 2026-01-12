@@ -2,11 +2,12 @@ import { motion } from "framer-motion";
 import { CheckCircle, Mail, RotateCcw } from "lucide-react";
 
 interface SuccessMessageProps {
+  email: string;
   fileCount: number;
   onReset: () => void;
 }
 
-const SuccessMessage = ({ fileCount, onReset }: SuccessMessageProps) => {
+const SuccessMessage = ({ email, fileCount, onReset }: SuccessMessageProps) => {
   return (
     <section className="py-16">
       <div className="container mx-auto px-6">
@@ -41,7 +42,7 @@ const SuccessMessage = ({ fileCount, onReset }: SuccessMessageProps) => {
               transition={{ delay: 0.4 }}
               className="text-muted-foreground mb-8 max-w-md mx-auto"
             >
-              Nossa IA está processando suas cotações. Você receberá o relatório comparativo em breve.
+              O relatório será enviado para seu email em alguns minutos.
             </motion.p>
 
             <motion.div
@@ -50,9 +51,9 @@ const SuccessMessage = ({ fileCount, onReset }: SuccessMessageProps) => {
               transition={{ delay: 0.5 }}
               className="flex items-center justify-center gap-3 p-4 rounded-xl bg-primary/10 border border-primary/20 mb-8"
             >
-              <Mail className="w-5 h-5 text-primary" />
-              <span className="text-sm text-muted-foreground">
-                O relatório será enviado para seu e-mail quando estiver pronto
+              <Mail className="w-5 h-5 text-primary flex-shrink-0" />
+              <span className="text-sm break-all">
+                {email}
               </span>
             </motion.div>
 
