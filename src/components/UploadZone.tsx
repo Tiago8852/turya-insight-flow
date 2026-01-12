@@ -126,10 +126,13 @@ const UploadZone = ({ onSuccess }: UploadZoneProps) => {
     console.log(">>> ENVIANDO PARA N8N <<<");
 
     try {
-      const response = await fetch("https://wgatech.app.n8n.cloud/webhook/deo-analise", {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        "https://corsproxy.io/?" + encodeURIComponent("https://wgatech.app.n8n.cloud/webhook/deo-analise"),
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       console.log("Response status:", response.status);
 
