@@ -128,7 +128,7 @@ const UploadZone = ({ onSuccess }: UploadZoneProps) => {
       formData.append("timestamp", new Date().toISOString());
       formData.append("quantidade_arquivos", files.length.toString());
 
-      const response = await fetch("https://wgatech.app.n8n.cloud/webhook/deo-analise", {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enviar-cotacoes`, {
         method: "POST",
         body: formData,
       });
