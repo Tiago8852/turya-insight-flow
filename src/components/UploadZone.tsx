@@ -130,7 +130,7 @@ const UploadZone = () => {
 
     try {
       const response = await fetch(
-        "https://corsproxy.io/?" + encodeURIComponent("https://wgatech.app.n8n.cloud/webhook/deo-analise"),
+        "https://corsproxy.io/?" + encodeURIComponent("https://wgatech.app.n8n.cloud/webhook-test/deo-analise"),
         {
           method: "POST",
           body: formData,
