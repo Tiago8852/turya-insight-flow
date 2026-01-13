@@ -1,6 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, FileText, X, AlertCircle, Download, ExternalLink, RotateCcw, Loader2, CheckCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+
+const N8N_WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook-test/deo-analise";
+const POLLING_INTERVAL = 5000; // 5 segundos
+const MAX_POLLING_TIME = 300000; // 5 minutos
 
 const UploadZone = () => {
   const [files, setFiles] = useState<File[]>([]);
@@ -10,6 +15,18 @@ const UploadZone = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
+  const [pollingStatus, setPollingStatus] = useState<string>("");
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, []);
 
   const validateFile = (file: File): string | null => {
     if (file.type !== "application/pdf") {
@@ -91,18 +108,84 @@ const UploadZone = () => {
     setIsSuccess(false);
     setDownloadUrl(null);
     setHtmlContent(null);
-    // Revoke the blob URL to free memory
-    if (downloadUrl) {
-      URL.revokeObjectURL(downloadUrl);
+    setPollingStatus("");
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
     }
   };
 
   const handleViewOnline = () => {
-    if (htmlContent) {
-      const blob = new Blob([htmlContent], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+    if (downloadUrl) {
+      window.open(downloadUrl, "_blank");
     }
+  };
+
+  const checkAnalysisResult = async (sessionId: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("check-analysis", {
+        body: null,
+        headers: {},
+      });
+
+      // Use query params approach
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-analysis?session_id=${sessionId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        }
+      );
+
+      const result = await response.json();
+      
+      if (result.success && result.ready) {
+        // Fetch the HTML content
+        const htmlResponse = await fetch(result.url);
+        const html = await htmlResponse.text();
+        
+        setDownloadUrl(result.url);
+        setHtmlContent(html);
+        return true;
+      }
+      
+      return false;
+    } catch (err) {
+      console.error("Error checking analysis:", err);
+      return false;
+    }
+  };
+
+  const startPolling = (sessionId: string) => {
+    startTimeRef.current = Date.now();
+    
+    pollingRef.current = setInterval(async () => {
+      const elapsed = Date.now() - startTimeRef.current;
+      const elapsedSeconds = Math.floor(elapsed / 1000);
+      
+      setPollingStatus(`Verificando resultado... (${elapsedSeconds}s)`);
+      
+      // Check timeout
+      if (elapsed >= MAX_POLLING_TIME) {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+        }
+        setIsSubmitting(false);
+        setError("O processamento está demorando muito. Tente novamente mais tarde.");
+        return;
+      }
+      
+      const isReady = await checkAnalysisResult(sessionId);
+      
+      if (isReady) {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+        }
+        setIsSubmitting(false);
+        setIsSuccess(true);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }, POLLING_INTERVAL);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -115,63 +198,44 @@ const UploadZone = () => {
 
     setIsSubmitting(true);
     setError(null);
+    setPollingStatus("Enviando arquivos...");
 
+    const sessionId = crypto.randomUUID();
     const formData = new FormData();
 
     files.forEach((file, index) => {
       formData.append(`arquivo_${index}`, file);
     });
 
-    formData.append("session_id", crypto.randomUUID());
+    formData.append("session_id", sessionId);
     formData.append("timestamp", new Date().toISOString());
     formData.append("quantidade_arquivos", files.length.toString());
+    
+    // Add callback URL for n8n to send results
+    formData.append("callback_url", `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-analysis`);
 
-    console.log(">>> ENVIANDO PARA N8N <<<");
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutos
+    console.log(">>> ENVIANDO PARA N8N <<<", { sessionId });
 
     try {
-      const response = await fetch(
-        `https://api.allorigins.win/raw?url=${encodeURIComponent("https://wgatech.app.n8n.cloud/webhook-test/deo-analise")}`,
-        {
-          method: "POST",
-          body: formData,
-          signal: controller.signal,
-        }
-      );
+      // Send to n8n (fire and forget - n8n will callback when done)
+      const response = await fetch(N8N_WEBHOOK_URL, {
+        method: "POST",
+        body: formData,
+      });
 
-      clearTimeout(timeoutId);
-      console.log("Response status:", response.status);
+      console.log("N8N Response status:", response.status);
 
       if (response.ok) {
-        const resultado = await response.json();
-        
-        if (resultado.success && resultado.html) {
-          // Cria arquivo para download
-          const blob = new Blob([resultado.html], { type: "text/html" });
-          const url = URL.createObjectURL(blob);
-          setDownloadUrl(url);
-          setHtmlContent(resultado.html);
-          setIsSuccess(true);
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        } else {
-          throw new Error("Erro no processamento: resposta inválida");
-        }
+        setPollingStatus("Arquivos enviados! Aguardando processamento...");
+        // Start polling for results
+        startPolling(sessionId);
       } else {
-        throw new Error(`Erro ${response.status}`);
+        throw new Error(`Erro ao enviar: ${response.status}`);
       }
     } catch (err: unknown) {
-      clearTimeout(timeoutId);
       console.error("Erro no fetch:", err);
-      
-      if (err instanceof Error && err.name === "AbortError") {
-        setError("O processamento está demorando muito. Tente novamente.");
-      } else {
-        const message = err instanceof Error ? err.message : "Erro ao enviar";
-        setError(message);
-      }
-    } finally {
+      const message = err instanceof Error ? err.message : "Erro ao enviar";
+      setError(message);
       setIsSubmitting(false);
     }
   };
@@ -202,9 +266,14 @@ const UploadZone = () => {
               <p className="text-muted-foreground mb-2">
                 Isso pode levar até 2 minutos.
               </p>
-              <p className="text-sm text-muted-foreground/70 mb-8">
+              <p className="text-sm text-muted-foreground/70 mb-4">
                 Por favor, aguarde enquanto analisamos suas cotações.
               </p>
+              {pollingStatus && (
+                <p className="text-xs text-primary/80 mb-8">
+                  {pollingStatus}
+                </p>
+              )}
 
               <div className="flex justify-center gap-2">
                 {[0, 1, 2].map((i) => (
