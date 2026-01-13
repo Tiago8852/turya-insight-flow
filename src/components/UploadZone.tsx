@@ -1,32 +1,21 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, FileText, X, AlertCircle, Download, ExternalLink, RotateCcw, Loader2, CheckCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Upload, FileText, X, AlertCircle, Mail } from "lucide-react";
+import { z } from "zod";
 
-const N8N_WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook-test/deo-analise";
-const POLLING_INTERVAL = 5000; // 5 segundos
-const MAX_POLLING_TIME = 300000; // 5 minutos
+interface UploadZoneProps {
+  onSuccess: (email: string, fileCount: number) => void;
+}
 
-const UploadZone = () => {
+const emailSchema = z.string().trim().email({ message: "Email inválido" });
+
+const UploadZone = ({ onSuccess }: UploadZoneProps) => {
   const [files, setFiles] = useState<File[]>([]);
+  const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [htmlContent, setHtmlContent] = useState<string | null>(null);
-  const [pollingStatus, setPollingStatus] = useState<string>("");
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<number>(0);
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
-    };
-  }, []);
 
   const validateFile = (file: File): string | null => {
     if (file.type !== "application/pdf") {
@@ -102,283 +91,65 @@ const UploadZone = () => {
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
-  const handleReset = () => {
-    setFiles([]);
-    setError(null);
-    setIsSuccess(false);
-    setDownloadUrl(null);
-    setHtmlContent(null);
-    setPollingStatus("");
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-    }
-  };
-
-  const handleViewOnline = () => {
-    if (downloadUrl) {
-      window.open(downloadUrl, "_blank");
-    }
-  };
-
-  const checkAnalysisResult = async (sessionId: string): Promise<boolean> => {
-    try {
-      const { data, error } = await supabase.functions.invoke("check-analysis", {
-        body: null,
-        headers: {},
-      });
-
-      // Use query params approach
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-analysis?session_id=${sessionId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-        }
-      );
-
-      const result = await response.json();
-      
-      if (result.success && result.ready) {
-        // Fetch the HTML content
-        const htmlResponse = await fetch(result.url);
-        const html = await htmlResponse.text();
-        
-        setDownloadUrl(result.url);
-        setHtmlContent(html);
-        return true;
-      }
-      
-      return false;
-    } catch (err) {
-      console.error("Error checking analysis:", err);
+  const validateEmail = (): boolean => {
+    const result = emailSchema.safeParse(email);
+    if (!result.success) {
+      setEmailError(result.error.errors[0].message);
       return false;
     }
-  };
-
-  const startPolling = (sessionId: string) => {
-    startTimeRef.current = Date.now();
-    
-    pollingRef.current = setInterval(async () => {
-      const elapsed = Date.now() - startTimeRef.current;
-      const elapsedSeconds = Math.floor(elapsed / 1000);
-      
-      setPollingStatus(`Verificando resultado... (${elapsedSeconds}s)`);
-      
-      // Check timeout
-      if (elapsed >= MAX_POLLING_TIME) {
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current);
-        }
-        setIsSubmitting(false);
-        setError("O processamento está demorando muito. Tente novamente mais tarde.");
-        return;
-      }
-      
-      const isReady = await checkAnalysisResult(sessionId);
-      
-      if (isReady) {
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current);
-        }
-        setIsSubmitting(false);
-        setIsSuccess(true);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
-    }, POLLING_INTERVAL);
+    setEmailError(null);
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (files.length === 0) {
-      setError("Selecione pelo menos um arquivo");
+    if (!email || files.length === 0) {
+      setError("Preencha o email e selecione pelo menos um arquivo");
       return;
     }
 
     setIsSubmitting(true);
     setError(null);
-    setPollingStatus("Enviando arquivos...");
 
-    const sessionId = crypto.randomUUID();
     const formData = new FormData();
 
     files.forEach((file, index) => {
       formData.append(`arquivo_${index}`, file);
     });
 
-    formData.append("session_id", sessionId);
+    formData.append("email", email);
+    formData.append("session_id", crypto.randomUUID());
     formData.append("timestamp", new Date().toISOString());
     formData.append("quantidade_arquivos", files.length.toString());
-    
-    // Add callback URL for n8n to send results
-    formData.append("callback_url", `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-analysis`);
 
-    console.log(">>> ENVIANDO PARA N8N <<<", { sessionId });
+    console.log(">>> ENVIANDO PARA N8N <<<");
 
     try {
-      // Send to n8n (fire and forget - n8n will callback when done)
-      const response = await fetch(N8N_WEBHOOK_URL, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        "https://corsproxy.io/?" + encodeURIComponent("https://wgatech.app.n8n.cloud/webhook-test/deo-analise"),
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
-      console.log("N8N Response status:", response.status);
+      console.log("Response status:", response.status);
 
       if (response.ok) {
-        setPollingStatus("Arquivos enviados! Aguardando processamento...");
-        // Start polling for results
-        startPolling(sessionId);
+        onSuccess(email, files.length);
       } else {
-        throw new Error(`Erro ao enviar: ${response.status}`);
+        throw new Error(`Erro ${response.status}`);
       }
     } catch (err: unknown) {
       console.error("Erro no fetch:", err);
       const message = err instanceof Error ? err.message : "Erro ao enviar";
       setError(message);
+    } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Loading State
-  if (isSubmitting) {
-    return (
-      <section id="upload" className="py-24 relative">
-        <div className="container mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="max-w-2xl mx-auto"
-          >
-            <div className="card-elevated p-12 md:p-16 text-center">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                className="w-24 h-24 mx-auto mb-8 rounded-3xl bg-primary/20 flex items-center justify-center"
-              >
-                <Loader2 className="w-12 h-12 text-primary" />
-              </motion.div>
-
-              <h3 className="text-2xl md:text-3xl font-bold mb-4">
-                Analisando suas <span className="text-gradient">cotações...</span>
-              </h3>
-
-              <p className="text-muted-foreground mb-2">
-                Isso pode levar até 2 minutos.
-              </p>
-              <p className="text-sm text-muted-foreground/70 mb-4">
-                Por favor, aguarde enquanto analisamos suas cotações.
-              </p>
-              {pollingStatus && (
-                <p className="text-xs text-primary/80 mb-8">
-                  {pollingStatus}
-                </p>
-              )}
-
-              <div className="flex justify-center gap-2">
-                {[0, 1, 2].map((i) => (
-                  <motion.div
-                    key={i}
-                    className="w-3 h-3 rounded-full bg-primary"
-                    animate={{ opacity: [0.3, 1, 0.3] }}
-                    transition={{
-                      duration: 1.5,
-                      repeat: Infinity,
-                      delay: i * 0.3,
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-    );
-  }
-
-  // Success State
-  if (isSuccess && downloadUrl) {
-    return (
-      <section id="upload" className="py-24 relative">
-        <div className="container mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="max-w-2xl mx-auto"
-          >
-            <div className="card-elevated p-8 md:p-12 text-center">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-                className="w-24 h-24 mx-auto mb-8 rounded-3xl bg-green-500/20 flex items-center justify-center"
-              >
-                <CheckCircle className="w-12 h-12 text-green-400" />
-              </motion.div>
-
-              <motion.h3
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-                className="text-2xl md:text-3xl font-bold mb-4"
-              >
-                Sua análise está <span className="text-gradient">pronta!</span>
-              </motion.h3>
-
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="text-muted-foreground mb-8"
-              >
-                Clique abaixo para baixar ou visualizar o relatório.
-              </motion.p>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                className="flex flex-col sm:flex-row gap-4 justify-center mb-8"
-              >
-                <a
-                  href={downloadUrl}
-                  download="Analise_DO.html"
-                  className="btn-turya text-foreground px-8 inline-flex items-center justify-center gap-2"
-                >
-                  <Download className="w-5 h-5" />
-                  Baixar Relatório
-                </a>
-
-                <button
-                  onClick={handleViewOnline}
-                  className="px-8 py-3 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 transition-all inline-flex items-center justify-center gap-2"
-                >
-                  <ExternalLink className="w-5 h-5" />
-                  Visualizar Online
-                </button>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.7 }}
-              >
-                <button
-                  onClick={handleReset}
-                  className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Enviar outras cotações
-                </button>
-              </motion.div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-    );
-  }
-
-  // Default Upload State
   return (
     <section id="upload" className="py-24 relative">
       <div className="container mx-auto px-6">
@@ -394,16 +165,59 @@ const UploadZone = () => {
               Envie suas <span className="text-gradient">Cotações</span>
             </h2>
             <p className="text-muted-foreground">
-              Faça upload dos PDFs para receber a análise instantânea
+              Preencha seu email e faça upload dos PDFs para receber a análise
             </p>
           </div>
 
           <form onSubmit={handleSubmit}>
+            {/* Email Input */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+              className="mb-6"
+            >
+              <label htmlFor="email" className="block text-sm font-medium mb-2 text-muted-foreground">
+                Seu email para receber o relatório
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (emailError) setEmailError(null);
+                  }}
+                  onBlur={validateEmail}
+                  placeholder="seu@email.com"
+                  disabled={isSubmitting}
+                  className={`w-full pl-12 pr-4 py-4 rounded-xl bg-card border transition-all outline-none ${
+                    emailError
+                      ? "border-destructive focus:border-destructive"
+                      : "border-border focus:border-primary"
+                  } disabled:opacity-60`}
+                />
+              </div>
+              {emailError && (
+                <motion.p
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-sm text-destructive mt-2 flex items-center gap-2"
+                >
+                  <AlertCircle className="w-4 h-4" />
+                  {emailError}
+                </motion.p>
+              )}
+            </motion.div>
+
             {/* Upload Zone */}
             <motion.div
               className={`upload-zone p-12 text-center cursor-pointer transition-all ${
                 isDragging ? "active scale-[1.02]" : ""
-              }`}
+              } ${isSubmitting ? "pointer-events-none opacity-60" : ""}`}
               onDragOver={(e) => {
                 e.preventDefault();
                 setIsDragging(true);
@@ -411,8 +225,8 @@ const UploadZone = () => {
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
               onClick={() => document.getElementById("file-input")?.click()}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
+              whileHover={{ scale: isSubmitting ? 1 : 1.01 }}
+              whileTap={{ scale: isSubmitting ? 1 : 0.99 }}
             >
               <input
                 id="file-input"
@@ -421,6 +235,7 @@ const UploadZone = () => {
                 multiple
                 onChange={handleFileInput}
                 className="hidden"
+                disabled={isSubmitting}
               />
 
               <motion.div
@@ -489,6 +304,7 @@ const UploadZone = () => {
                           removeFile(index);
                         }}
                         className="p-2 hover:bg-muted rounded-lg transition-colors"
+                        disabled={isSubmitting}
                       >
                         <X className="w-4 h-4 text-muted-foreground" />
                       </button>
@@ -508,10 +324,32 @@ const UploadZone = () => {
             >
               <button
                 type="submit"
-                disabled={files.length === 0}
+                disabled={isSubmitting || files.length === 0 || !email}
                 className="btn-turya text-foreground px-12 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
               >
-                Analisar {files.length > 0 ? files.length : ""} {files.length === 1 ? "Cotação" : "Cotações"}
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Enviando...
+                  </span>
+                ) : (
+                  `Analisar ${files.length > 0 ? files.length : ""} ${files.length === 1 ? "Cotação" : "Cotações"}`
+                )}
               </button>
               {files.length === 0 && (
                 <p className="text-xs text-muted-foreground mt-3">Selecione pelo menos 1 arquivo PDF</p>
