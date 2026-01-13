@@ -128,15 +128,20 @@ const UploadZone = () => {
 
     console.log(">>> ENVIANDO PARA N8N <<<");
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutos
+
     try {
       const response = await fetch(
-        "https://corsproxy.io/?" + encodeURIComponent("https://wgatech.app.n8n.cloud/webhook-test/deo-analise"),
+        `https://api.allorigins.win/raw?url=${encodeURIComponent("https://wgatech.app.n8n.cloud/webhook-test/deo-analise")}`,
         {
           method: "POST",
           body: formData,
+          signal: controller.signal,
         }
       );
 
+      clearTimeout(timeoutId);
       console.log("Response status:", response.status);
 
       if (response.ok) {
@@ -157,9 +162,15 @@ const UploadZone = () => {
         throw new Error(`Erro ${response.status}`);
       }
     } catch (err: unknown) {
+      clearTimeout(timeoutId);
       console.error("Erro no fetch:", err);
-      const message = err instanceof Error ? err.message : "Erro ao enviar";
-      setError(message);
+      
+      if (err instanceof Error && err.name === "AbortError") {
+        setError("O processamento está demorando muito. Tente novamente.");
+      } else {
+        const message = err instanceof Error ? err.message : "Erro ao enviar";
+        setError(message);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -188,8 +199,11 @@ const UploadZone = () => {
                 Analisando suas <span className="text-gradient">cotações...</span>
               </h3>
 
-              <p className="text-muted-foreground mb-8">
-                Isso pode levar alguns minutos. Por favor, aguarde.
+              <p className="text-muted-foreground mb-2">
+                Isso pode levar até 2 minutos.
+              </p>
+              <p className="text-sm text-muted-foreground/70 mb-8">
+                Por favor, aguarde enquanto analisamos suas cotações.
               </p>
 
               <div className="flex justify-center gap-2">
