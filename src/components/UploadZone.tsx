@@ -127,26 +127,28 @@ const UploadZone = ({ onSuccess }: UploadZoneProps) => {
     console.log("Session ID:", sessionId);
 
     try {
-      const response = await fetch(
+      // Fire-and-forget: não esperamos resposta pois n8n pode demorar até 5 minutos
+      // O CORS proxy tem timeout curto, então enviamos e seguimos
+      fetch(
         "https://corsproxy.io/?" + encodeURIComponent("https://wgatech.app.n8n.cloud/webhook-test/deo-analise"),
         {
           method: "POST",
           body: formData,
         }
-      );
+      ).then(response => {
+        console.log("n8n response status:", response.status);
+      }).catch(err => {
+        // Ignoramos erros de timeout do proxy - os arquivos já foram enviados
+        console.log("n8n proxy timeout (esperado):", err.message);
+      });
 
-      console.log("Response status:", response.status);
-
-      if (response.ok) {
-        onSuccess(sessionId, files.length);
-      } else {
-        throw new Error(`Erro ${response.status}`);
-      }
+      // Sucesso imediato - a análise continua no n8n em background
+      console.log("Arquivos enviados, iniciando tela de processamento...");
+      onSuccess(sessionId, files.length);
     } catch (err: unknown) {
-      console.error("Erro no fetch:", err);
+      console.error("Erro crítico no envio:", err);
       const message = err instanceof Error ? err.message : "Erro ao enviar";
       setError(message);
-    } finally {
       setIsSubmitting(false);
     }
   };

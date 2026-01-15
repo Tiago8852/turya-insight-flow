@@ -29,40 +29,59 @@ const Index = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Simulate progress animation for stages
+  // Animate progress slowly over ~5 minutes for stages
   useEffect(() => {
     if (appState !== "processing") return;
 
     const stageProgress: Record<ProcessingStage, number> = {
-      uploading: 25,
-      processing: 60,
-      generating: 90,
+      uploading: 15,
+      processing: 75,
+      generating: 95,
       completed: 100,
     };
 
     const targetProgress = stageProgress[processingStage];
     
+    // Velocidade mais lenta para refletir ~5 minutos de análise
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= targetProgress) {
           clearInterval(interval);
           return targetProgress;
         }
-        return Math.min(prev + 1, targetProgress);
+        // Incremento pequeno para animação suave e longa
+        return Math.min(prev + 0.5, targetProgress);
       });
-    }, 50);
+    }, 1500); // 1.5s por incremento de 0.5%
 
     return () => clearInterval(interval);
   }, [appState, processingStage]);
 
-  // Progress through stages automatically (upload stage transitions quickly)
+  // Progress through stages automatically - tempo ajustado para ~5 minutos total
   useEffect(() => {
     if (appState !== "processing") return;
 
-    if (processingStage === "uploading") {
+    const stageTimers: Record<ProcessingStage, number> = {
+      uploading: 5000,      // 5 segundos no upload
+      processing: 240000,   // 4 minutos processando IA
+      generating: 60000,    // 1 minuto gerando relatório
+      completed: 0,
+    };
+
+    const nextStage: Record<ProcessingStage, ProcessingStage | null> = {
+      uploading: "processing",
+      processing: "generating",
+      generating: null, // Aguarda o relatório externo
+      completed: null,
+    };
+
+    const duration = stageTimers[processingStage];
+    const next = nextStage[processingStage];
+
+    if (duration > 0 && next) {
       const timer = setTimeout(() => {
-        setProcessingStage("processing");
-      }, 2000);
+        setProcessingStage(next);
+      }, duration);
       return () => clearTimeout(timer);
     }
   }, [appState, processingStage]);
@@ -139,8 +158,11 @@ const Index = () => {
                   
                   <ProcessingStatus stage={processingStage} progress={progress} />
 
-                  <p className="text-center text-sm text-muted-foreground mt-8">
-                    Aguarde enquanto nossa IA analisa as cotações...
+                  <p className="text-center text-sm text-muted-foreground mt-6">
+                    A análise pode levar até 5 minutos.
+                  </p>
+                  <p className="text-center text-xs text-muted-foreground/70 mt-2">
+                    Não feche esta página enquanto o processamento está em andamento.
                   </p>
                 </div>
               </motion.div>
