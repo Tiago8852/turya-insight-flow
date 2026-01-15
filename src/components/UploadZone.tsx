@@ -11,14 +11,18 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface UploadZoneProps {
-  onSuccess: (sessionId: string, fileCount: number) => void;
+  onSuccess: (htmlBlob: Blob) => void;
+  onError: (message: string) => void;
+  onStartProcessing: () => void;
 }
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
+const WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook-test/deo-analise";
+const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos
 
-const UploadZone = ({ onSuccess }: UploadZoneProps) => {
+const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) => {
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +115,7 @@ const UploadZone = ({ onSuccess }: UploadZoneProps) => {
 
     setIsSubmitting(true);
     setError(null);
+    onStartProcessing();
 
     const sessionId = crypto.randomUUID();
     const formData = new FormData();
@@ -127,28 +132,50 @@ const UploadZone = ({ onSuccess }: UploadZoneProps) => {
     console.log("Session ID:", sessionId);
 
     try {
-      // Fire-and-forget: não esperamos resposta pois n8n pode demorar até 5 minutos
-      // O CORS proxy tem timeout curto, então enviamos e seguimos
-      fetch(
-        "https://corsproxy.io/?" + encodeURIComponent("https://wgatech.app.n8n.cloud/webhook-test/deo-analise"),
-        {
-          method: "POST",
-          body: formData,
-        }
-      ).then(response => {
-        console.log("n8n response status:", response.status);
-      }).catch(err => {
-        // Ignoramos erros de timeout do proxy - os arquivos já foram enviados
-        console.log("n8n proxy timeout (esperado):", err.message);
+      // Criar AbortController para timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
       });
 
-      // Sucesso imediato - a análise continua no n8n em background
-      console.log("Arquivos enviados, iniciando tela de processamento...");
-      onSuccess(sessionId, files.length);
+      clearTimeout(timeoutId);
+
+      console.log("Response status:", response.status);
+      console.log("Content-Type:", response.headers.get("content-type"));
+
+      if (!response.ok) {
+        throw new Error(`Erro do servidor: ${response.status}`);
+      }
+
+      // Receber o arquivo HTML como blob
+      const blob = await response.blob();
+      console.log("Blob recebido:", blob.size, "bytes, tipo:", blob.type);
+
+      if (blob.size === 0) {
+        throw new Error("Resposta vazia do servidor");
+      }
+
+      // Sucesso - enviar blob para o componente pai
+      onSuccess(blob);
     } catch (err: unknown) {
-      console.error("Erro crítico no envio:", err);
-      const message = err instanceof Error ? err.message : "Erro ao enviar";
+      console.error("Erro no envio:", err);
+      
+      let message = "Erro ao processar análise";
+      
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          message = "Tempo limite excedido (5 minutos). Por favor, tente novamente.";
+        } else {
+          message = err.message;
+        }
+      }
+      
       setError(message);
+      onError(message);
       setIsSubmitting(false);
     }
   };
