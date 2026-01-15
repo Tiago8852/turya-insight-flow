@@ -20,6 +20,7 @@ const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
 const WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook-test/deo-analise";
+const PROXY_URL = "https://corsproxy.io/?" + encodeURIComponent(WEBHOOK_URL);
 const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos
 
 const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) => {
@@ -136,7 +137,9 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      const response = await fetch(WEBHOOK_URL, {
+      console.log("Usando proxy CORS:", PROXY_URL);
+      
+      const response = await fetch(PROXY_URL, {
         method: "POST",
         body: formData,
         signal: controller.signal,
