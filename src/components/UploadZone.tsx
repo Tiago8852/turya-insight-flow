@@ -19,8 +19,9 @@ interface UploadZoneProps {
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
-const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/proxy-n8n`;
-const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutos (n8n pode demorar)
+const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/proxy-n8n`;
+const POLLING_INTERVAL = 10000; // 10 segundos
+const MAX_POLLING_TIME = 10 * 60 * 1000; // 10 minutos
 
 const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) => {
   const [files, setFiles] = useState<File[]>([]);
@@ -28,6 +29,7 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const validateFile = (file: File): string | null => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -105,6 +107,13 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) 
     fileInputRef.current?.click();
   };
 
+  const stopPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -115,8 +124,7 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) 
 
     setIsSubmitting(true);
     setError(null);
-    onStartProcessing();
-
+    
     const sessionId = crypto.randomUUID();
     const formData = new FormData();
 
@@ -128,50 +136,78 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) 
     formData.append("timestamp", new Date().toISOString());
     formData.append("quantidade_arquivos", files.length.toString());
 
-    console.log(">>> ENVIANDO PARA N8N <<<");
+    console.log(">>> INICIANDO ANÁLISE <<<");
     console.log("Session ID:", sessionId);
 
     try {
-      // Criar AbortController para timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-      const response = await fetch(WEBHOOK_URL, {
+      // 1. Dispara o workflow (fire-and-forget)
+      const triggerResponse = await fetch(`${PROXY_URL}?action=trigger`, {
         method: "POST",
         body: formData,
-        signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
-      console.log("Response status:", response.status);
-      console.log("Content-Type:", response.headers.get("content-type"));
-
-      if (!response.ok) {
-        throw new Error(`Erro do servidor: ${response.status}`);
+      if (!triggerResponse.ok) {
+        throw new Error(`Erro ao iniciar análise: ${triggerResponse.status}`);
       }
 
-      // Receber o arquivo HTML como blob
-      const blob = await response.blob();
-      console.log("Blob recebido:", blob.size, "bytes, tipo:", blob.type);
+      console.log("Workflow disparado, iniciando polling...");
+      
+      // Mostra tela de loading
+      onStartProcessing();
 
-      if (blob.size === 0) {
-        throw new Error("Resposta vazia do servidor");
-      }
+      // 2. Inicia polling para verificar quando o resultado está pronto
+      const startTime = Date.now();
+      
+      pollingRef.current = setInterval(async () => {
+        try {
+          // Verifica timeout
+          if (Date.now() - startTime > MAX_POLLING_TIME) {
+            stopPolling();
+            onError("Tempo limite excedido (10 minutos). Tente novamente.");
+            setIsSubmitting(false);
+            return;
+          }
 
-      // Sucesso - enviar blob para o componente pai
-      onSuccess(blob);
+          console.log("Verificando resultado...");
+          
+          const checkResponse = await fetch(
+            `${PROXY_URL}?action=check&sessionId=${sessionId}`
+          );
+
+          if (!checkResponse.ok) {
+            console.error("Erro no check:", checkResponse.status);
+            return;
+          }
+
+          const contentType = checkResponse.headers.get("content-type") || "";
+          
+          // Se retornou HTML, o resultado está pronto!
+          if (contentType.includes("text/html")) {
+            console.log("Resultado recebido!");
+            stopPolling();
+            
+            const blob = await checkResponse.blob();
+            setIsSubmitting(false);
+            onSuccess(blob);
+            return;
+          }
+
+          // Ainda processando
+          const data = await checkResponse.json();
+          console.log("Status:", data.status);
+          
+        } catch (err) {
+          console.error("Erro no polling:", err);
+        }
+      }, POLLING_INTERVAL);
+
     } catch (err: unknown) {
       console.error("Erro no envio:", err);
+      stopPolling();
       
       let message = "Erro ao processar análise";
-      
       if (err instanceof Error) {
-        if (err.name === "AbortError") {
-          message = "Tempo limite excedido (5 minutos). Por favor, tente novamente.";
-        } else {
-          message = err.message;
-        }
+        message = err.message;
       }
       
       setError(message);
