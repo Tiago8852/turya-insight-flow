@@ -19,7 +19,7 @@ interface UploadZoneProps {
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
-const WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook-test/deo-analise";
+const WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook/deo-analise";
 const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos
 
 const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) => {
