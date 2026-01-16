@@ -19,8 +19,8 @@ interface UploadZoneProps {
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
-const WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook/deo-analise";
-const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos
+const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/proxy-n8n`;
+const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutos (n8n pode demorar)
 
 const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) => {
   const [files, setFiles] = useState<File[]>([]);
