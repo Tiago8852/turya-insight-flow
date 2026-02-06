@@ -19,7 +19,8 @@ interface UploadZoneProps {
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
-const WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook/e318c85e-0e6d-46a9-8205-9938e16895c2";
+const N8N_URL = "https://wgatech.app.n8n.cloud/webhook/e318c85e-0e6d-46a9-8205-9938e16895c2";
+const WEBHOOK_URL = "https://corsproxy.io/?" + encodeURIComponent(N8N_URL);
 const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutos (n8n pode demorar)
 
 const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) => {
