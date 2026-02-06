@@ -1,18 +1,13 @@
 import { motion } from "framer-motion";
-import { FileText, Download, RotateCcw, CheckCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CheckCircle, Mail, RotateCcw } from "lucide-react";
 
-interface DownloadReportProps {
-  reportUrl: string;
+interface SuccessMessageProps {
+  email: string;
+  fileCount: number;
   onReset: () => void;
 }
 
-const DownloadReport = ({ reportUrl, onReset }: DownloadReportProps) => {
-  const handleDownload = () => {
-    // Open the report URL in a new tab or trigger download
-    window.open(reportUrl, "_blank");
-  };
-
+const SuccessMessage = ({ email, fileCount, onReset }: SuccessMessageProps) => {
   return (
     <section className="py-16">
       <div className="container mx-auto px-6">
@@ -37,8 +32,8 @@ const DownloadReport = ({ reportUrl, onReset }: DownloadReportProps) => {
               transition={{ delay: 0.3 }}
               className="text-3xl font-bold mb-4"
             >
-              Sua análise está{" "}
-              <span className="text-gradient">pronta!</span>
+              {fileCount === 1 ? "Cotação enviada" : "Cotações enviadas"}{" "}
+              <span className="text-gradient">com sucesso!</span>
             </motion.h3>
 
             <motion.p
@@ -47,45 +42,25 @@ const DownloadReport = ({ reportUrl, onReset }: DownloadReportProps) => {
               transition={{ delay: 0.4 }}
               className="text-muted-foreground mb-8 max-w-md mx-auto"
             >
-              O relatório comparativo das suas cotações D&O foi gerado com sucesso.
+              O relatório será enviado para seu email em alguns minutos.
             </motion.p>
 
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              className="flex items-center justify-center gap-4 p-6 rounded-xl bg-primary/10 border border-primary/20 mb-8"
+              className="flex items-center justify-center gap-3 p-4 rounded-xl bg-primary/10 border border-primary/20 mb-8"
             >
-              <div className="w-14 h-14 rounded-xl bg-primary/20 flex items-center justify-center">
-                <FileText className="w-7 h-7 text-primary" />
-              </div>
-              <div className="text-left">
-                <p className="font-semibold">Relatório de Análise D&O</p>
-                <p className="text-sm text-muted-foreground">Clique para baixar</p>
-              </div>
+              <Mail className="w-5 h-5 text-primary flex-shrink-0" />
+              <span className="text-sm break-all">
+                {email}
+              </span>
             </motion.div>
 
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
-              className="flex flex-col sm:flex-row gap-4 justify-center"
-            >
-              <Button
-                onClick={handleDownload}
-                size="lg"
-                className="gap-2"
-              >
-                <Download className="w-5 h-5" />
-                Baixar Relatório
-              </Button>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.8 }}
-              className="mt-8"
+              transition={{ delay: 0.7 }}
             >
               <button
                 onClick={onReset}
@@ -102,4 +77,4 @@ const DownloadReport = ({ reportUrl, onReset }: DownloadReportProps) => {
   );
 };
 
-export default DownloadReport;
+export default SuccessMessage;
