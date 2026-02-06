@@ -3,26 +3,14 @@ import { FileText, Download, RotateCcw, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface DownloadReportProps {
-  htmlBlob: Blob;
+  reportUrl: string;
   onReset: () => void;
 }
 
-const DownloadReport = ({ htmlBlob, onReset }: DownloadReportProps) => {
+const DownloadReport = ({ reportUrl, onReset }: DownloadReportProps) => {
   const handleDownload = () => {
-    const url = window.URL.createObjectURL(htmlBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "Analise_DO.html";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    // Open the report URL in a new tab or trigger download
+    window.open(reportUrl, "_blank");
   };
 
   return (
@@ -49,7 +37,8 @@ const DownloadReport = ({ htmlBlob, onReset }: DownloadReportProps) => {
               transition={{ delay: 0.3 }}
               className="text-3xl font-bold mb-4"
             >
-              Análise concluída!
+              Sua análise está{" "}
+              <span className="text-gradient">pronta!</span>
             </motion.h3>
 
             <motion.p
@@ -71,10 +60,8 @@ const DownloadReport = ({ htmlBlob, onReset }: DownloadReportProps) => {
                 <FileText className="w-7 h-7 text-primary" />
               </div>
               <div className="text-left">
-                <p className="font-semibold">Analise_DO.html</p>
-                <p className="text-sm text-muted-foreground">
-                  {formatFileSize(htmlBlob.size)}
-                </p>
+                <p className="font-semibold">Relatório de Análise D&O</p>
+                <p className="text-sm text-muted-foreground">Clique para baixar</p>
               </div>
             </motion.div>
 

@@ -11,18 +11,14 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface UploadZoneProps {
-  onSuccess: (htmlBlob: Blob) => void;
-  onError: (message: string) => void;
-  onStartProcessing: () => void;
+  onSuccess: (sessionId: string, fileCount: number) => void;
 }
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
-const WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook/deo-analise";
-const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos
 
-const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) => {
+const UploadZone = ({ onSuccess }: UploadZoneProps) => {
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +111,6 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) 
 
     setIsSubmitting(true);
     setError(null);
-    onStartProcessing();
 
     const sessionId = crypto.randomUUID();
     const formData = new FormData();
@@ -132,50 +127,26 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) 
     console.log("Session ID:", sessionId);
 
     try {
-      // Criar AbortController para timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-      const response = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
+      const response = await fetch(
+        "https://corsproxy.io/?" + encodeURIComponent("https://wgatech.app.n8n.cloud/webhook-test/deo-analise"),
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       console.log("Response status:", response.status);
-      console.log("Content-Type:", response.headers.get("content-type"));
 
-      if (!response.ok) {
-        throw new Error(`Erro do servidor: ${response.status}`);
+      if (response.ok) {
+        onSuccess(sessionId, files.length);
+      } else {
+        throw new Error(`Erro ${response.status}`);
       }
-
-      // Receber o arquivo HTML como blob
-      const blob = await response.blob();
-      console.log("Blob recebido:", blob.size, "bytes, tipo:", blob.type);
-
-      if (blob.size === 0) {
-        throw new Error("Resposta vazia do servidor");
-      }
-
-      // Sucesso - enviar blob para o componente pai
-      onSuccess(blob);
     } catch (err: unknown) {
-      console.error("Erro no envio:", err);
-      
-      let message = "Erro ao processar análise";
-      
-      if (err instanceof Error) {
-        if (err.name === "AbortError") {
-          message = "Tempo limite excedido (5 minutos). Por favor, tente novamente.";
-        } else {
-          message = err.message;
-        }
-      }
-      
+      console.error("Erro no fetch:", err);
+      const message = err instanceof Error ? err.message : "Erro ao enviar";
       setError(message);
-      onError(message);
+    } finally {
       setIsSubmitting(false);
     }
   };
