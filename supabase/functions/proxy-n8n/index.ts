@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const N8N_WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook/deo-analise";
+const N8N_WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook/e318c85e-0e6d-46a9-8205-9938e16895c2";
 
 serve(async (req) => {
   // Handle CORS preflight
