@@ -19,7 +19,7 @@ interface UploadZoneProps {
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
-const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/proxy-n8n`;
+const WEBHOOK_URL = "https://wgatech.app.n8n.cloud/webhook/e318c85e-0e6d-46a9-8205-9938e16895c2";
 const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutos (n8n pode demorar)
 
 const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) => {
@@ -120,8 +120,8 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing }: UploadZoneProps) 
     const sessionId = crypto.randomUUID();
     const formData = new FormData();
 
-    files.forEach((file, index) => {
-      formData.append(`arquivo_${index}`, file);
+    files.forEach((file) => {
+      formData.append("files", file);
     });
 
     formData.append("session_id", sessionId);
